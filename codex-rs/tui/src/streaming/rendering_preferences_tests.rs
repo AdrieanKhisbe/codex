@@ -68,10 +68,13 @@ fn lists_match_incremental_and_emitted_responses() {
         "After.\n\nOne.\n\nTwo.\n\nThree.\n"
     );
     for lists in [true, false] {
-        preferences::init(TuiRendering {
-            lists,
-            ..Default::default()
-        });
+        preferences::init(
+            TuiRendering {
+                lists,
+                ..Default::default()
+            },
+            &Default::default(),
+        );
         let mut stream = StreamCore::new(
             Some(24),
             &cwd,
@@ -119,12 +122,15 @@ fn rendering_preferences_match_incremental_final_and_emitted_responses() {
     for mermaid in [true, false] {
         for math in [true, false] {
             for tables in [true, false] {
-                preferences::init(TuiRendering {
-                    mermaid,
-                    math,
-                    tables,
-                    ..Default::default()
-                });
+                preferences::init(
+                    TuiRendering {
+                        mermaid,
+                        math,
+                        tables,
+                        ..Default::default()
+                    },
+                    &Default::default(),
+                );
                 // A disabled table must retain even the prose preceding it inside its fence.
                 let mut source = if tables {
                     source.to_owned()

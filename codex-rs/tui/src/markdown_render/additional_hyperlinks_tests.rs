@@ -9,12 +9,12 @@ fn protocols() -> codex_config::AdditionalHyperlinkProtocols {
 struct ResetPreferences;
 impl Drop for ResetPreferences {
     fn drop(&mut self) {
-        preferences::init(Default::default());
+        preferences::init(Default::default(), &Default::default());
     }
 }
 
 fn enable_protocols() -> ResetPreferences {
-    preferences::init_with_protocols(Default::default(), protocols());
+    preferences::init(Default::default(), &protocols());
     ResetPreferences
 }
 
@@ -143,7 +143,7 @@ fn additional_hyperlinks_only_mark_the_label_columns_and_reach_the_terminal_buff
         .collect::<Vec<_>>();
     assert_eq!(linked_columns, (4..17).collect::<Vec<_>>());
     let mut line = HyperlinkLine::new(Line::default());
-    line.push_span_with_link(
+    line.push_span(
         "open".into(),
         TerminalHyperlink::markdown(destination, &protocols()).as_ref(),
     );
@@ -215,7 +215,7 @@ fn additional_hyperlinks_keep_validation_and_existing_trusted_capabilities_separ
         None
     );
     let mut line = HyperlinkLine::new(Line::default());
-    line.push_span_with_link(
+    line.push_span(
         "open".into(),
         TerminalHyperlink::markdown("file:///tmp/a.rs", &protocols()).as_ref(),
     );
@@ -238,7 +238,7 @@ fn shared_preferences_apply_to_existing_renderers_without_widget_setup() {
     assert_destination(&question, destination);
     let message = crate::history_cell::AgentMarkdownCell::new(source, Path::new("/tmp"));
     assert_destination(&message.transcript_hyperlink_lines(80), destination);
-    preferences::init(Default::default());
+    preferences::init(Default::default(), &Default::default());
     assert!(
         reasoning
             .transcript_hyperlink_lines(80)
@@ -262,7 +262,7 @@ fn each_render_keeps_one_settings_snapshot() {
         Some(80),
         None,
         &|_| {
-            preferences::init(Default::default());
+            preferences::init(Default::default(), &Default::default());
             true
         },
     );

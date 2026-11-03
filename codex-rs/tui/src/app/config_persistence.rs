@@ -2150,7 +2150,7 @@ theme = "dracula"
         let mut tui = crate::tui::test_support::make_test_tui()?;
         app.sync_tui_theme_selection("dracula".to_string());
         app.chat_widget.requires_openai_auth = false;
-        crate::markdown_render::preferences::init(Default::default());
+        crate::markdown_render::preferences::init(Default::default(), &Default::default());
         app.local_settings.tui.rendering.math = false;
         let mut legacy_config = app.config.clone();
         legacy_config.tui_theme = Some("nord".to_string());

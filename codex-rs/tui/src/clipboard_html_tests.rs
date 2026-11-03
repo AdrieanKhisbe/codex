@@ -71,10 +71,13 @@ fn markdown_clipboard_escapes_raw_html_and_rejects_unsafe_destinations() {
 fn markdown_clipboard_unwraps_table_fences_independent_of_tui_preferences() {
     let table = "| Item | Result |\n| --- | --- |\n| Copy | Formatted |\n";
     for tables in [true, false] {
-        crate::markdown_render::preferences::init(codex_config::types::TuiRendering {
-            tables,
-            ..Default::default()
-        });
+        crate::markdown_render::preferences::init(
+            codex_config::types::TuiRendering {
+                tables,
+                ..Default::default()
+            },
+            &Default::default(),
+        );
         assert_eq!(
             render_markdown(&format!("```markdown\n{table}```")),
             render_markdown(table)

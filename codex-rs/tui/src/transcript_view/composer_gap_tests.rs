@@ -1,6 +1,7 @@
 //! Copy outcomes remain truthful at narrow widths and release stale navigation hit targets.
 
 use super::*;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::transcript_view::tests::cell;
 use crate::transcript_view::tests::render;
 use crate::transcript_view::tests::text;
@@ -149,7 +150,10 @@ fn feedback_releases_navigation_targets_and_expiry_restores_them() {
 fn tip_links_follow_alignment_and_release_stale_targets() {
     let destination = "https://example.com/docs";
     let mut tip = HyperlinkLine::from("Tip: ");
-    tip.push_span("文档".into(), Some(destination));
+    tip.push_span(
+        "文档".into(),
+        Some(&TerminalHyperlink::web(0..0, destination.into())),
+    );
     let mut view = TranscriptView::default();
     let area = Rect::new(
         /*x*/ 4, /*y*/ 3, /*width*/ 30, /*height*/ 1,

@@ -2,6 +2,7 @@
 
 use super::FooterContent;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::osc8_hyperlink;
 use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
@@ -12,9 +13,15 @@ fn clipped_links_keep_their_cells_after_a_halfwidth_katakana_grapheme() {
     let project_url = "https://example.com/project";
     let pr_url = "https://example.com/pr/42";
     let mut line = HyperlinkLine::default();
-    line.push_span("ｶﾞ".into(), Some(project_url));
+    line.push_span(
+        "ｶﾞ".into(),
+        Some(&TerminalHyperlink::web(0..0, project_url.into())),
+    );
     line.push_span(" · ".into(), /*destination*/ None);
-    line.push_span("PR #42".into(), Some(pr_url));
+    line.push_span(
+        "PR #42".into(),
+        Some(&TerminalHyperlink::web(0..0, pr_url.into())),
+    );
 
     let area = Rect::new(
         /*x*/ 0, /*y*/ 0, /*width*/ 10, /*height*/ 1,
@@ -38,7 +45,10 @@ fn clipped_links_keep_their_cells_after_a_halfwidth_katakana_grapheme() {
 fn arabic_prefix_keeps_link_on_the_painted_cells_at_exact_fit_and_overflow() {
     let url = "https://example.com/pr/42";
     let mut line = HyperlinkLine::from("لا · ");
-    line.push_span("PR #42".into(), Some(url));
+    line.push_span(
+        "PR #42".into(),
+        Some(&TerminalHyperlink::web(0..0, url.into())),
+    );
     assert_eq!(line.width(), 11);
 
     for (width, visible_link) in [(11, "PR #42"), (10, "PR #")] {

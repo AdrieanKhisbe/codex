@@ -1532,9 +1532,9 @@ async fn run_ratatui_app(
             })
         };
 
-    crate::markdown_render::preferences::init_with_protocols(
+    crate::markdown_render::preferences::init(
         config.tui_rendering,
-        config.tui_additional_hyperlink_protocols.clone(),
+        &config.tui_additional_hyperlink_protocols,
     );
     // Startup pickers need the current theme before selection can reload config.
     // Leave the one-time override initialization below to use the final config.
@@ -2091,9 +2091,9 @@ async fn run_ratatui_app(
     }
 
     let local_settings = crate::local_settings::LocalSettings::for_tui(&config, &tui);
-    crate::markdown_render::preferences::init_with_protocols(
+    crate::markdown_render::preferences::init(
         local_settings.tui.rendering,
-        local_settings.tui.additional_hyperlink_protocols.clone(),
+        &local_settings.tui.additional_hyperlink_protocols,
     );
     // Configure syntax highlighting theme from the final config — onboarding
     // and resume/fork can both reload config with a different tui_theme, so

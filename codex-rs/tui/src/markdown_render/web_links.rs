@@ -96,7 +96,7 @@ impl WebLinkDisplay {
 }
 
 /// The Markdown writer calls this only for an already approved destination.
-pub(crate) fn hide_link_destination(_destination: &str) -> bool {
+pub(crate) fn hide_web_link_destination(_destination: &str) -> bool {
     static DISPLAY: LazyLock<WebLinkDisplay> = LazyLock::new(|| {
         if !std::io::stdout().is_terminal() || std::env::var_os("STY").is_some() {
             return WebLinkDisplay::WithDestination;

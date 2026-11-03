@@ -105,7 +105,7 @@ mod list_spacing_tests;
 #[cfg(test)]
 #[path = "markdown_render/task_list_tests.rs"]
 mod task_list_tests;
-pub(crate) use web_links::hide_link_destination;
+pub(crate) use web_links::hide_web_link_destination;
 use web_links::style_bare_web_urls;
 
 const TABLE_COLUMN_GAP: usize = 2;
@@ -1355,7 +1355,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
     fn push_span_to_table_cell(&mut self, span: Span<'static>) {
         let span = self.style_link_label(span);
         let mut annotated = HyperlinkLine::new(Line::default());
-        annotated.push_span_with_link(
+        annotated.push_span(
             span,
             self.link.as_ref().and_then(|link| link.hyperlink.as_ref()),
         );
@@ -1389,7 +1389,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         let hyperlink = self.link.as_ref().and_then(|link| link.hyperlink.as_ref());
         let mut annotated = if let Some(hyperlink) = hyperlink {
             let mut annotated = HyperlinkLine::new(Line::default());
-            annotated.push_span_with_link(span, Some(hyperlink));
+            annotated.push_span(span, Some(hyperlink));
             annotated
         } else if self.link.is_some() || self.in_code_block {
             HyperlinkLine::new(Line::from(span))
@@ -1967,10 +1967,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                              current_text: &mut String,
                              destination: Option<&TerminalHyperlink>| {
                     if !current_text.is_empty() {
-                        out.push_span_with_link(
-                            Span::raw(std::mem::take(current_text)),
-                            destination,
-                        );
+                        out.push_span(Span::raw(std::mem::take(current_text)), destination);
                     }
                 };
                 for (byte, ch) in text.char_indices() {
@@ -2243,7 +2240,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                 if self.in_table_cell() {
                     self.push_span_to_table_cell(" (".into());
                     let mut destination = HyperlinkLine::new(Line::default());
-                    destination.push_span_with_link(
+                    destination.push_span(
                         Span::styled(link.destination.clone(), self.styles.link),
                         link.hyperlink.as_ref(),
                     );
@@ -2256,7 +2253,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                 } else {
                     self.push_span(" (".into());
                     let mut destination = HyperlinkLine::new(Line::default());
-                    destination.push_span_with_link(
+                    destination.push_span(
                         Span::styled(link.destination.clone(), self.styles.link),
                         link.hyperlink.as_ref(),
                     );
@@ -2487,7 +2484,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         }
         if let Some(line) = self.current_line_content.as_mut() {
             self.copy_line.push(span.content.len(), &self.copy_inline);
-            line.push_span_with_link(
+            line.push_span(
                 span,
                 self.link.as_ref().and_then(|link| link.hyperlink.as_ref()),
             );
@@ -2523,7 +2520,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         let hyperlink = self.link.as_ref().and_then(|link| link.hyperlink.as_ref());
         let annotated = if let Some(hyperlink) = hyperlink {
             let mut annotated = HyperlinkLine::new(Line::default());
-            annotated.push_span_with_link(span, Some(hyperlink));
+            annotated.push_span(span, Some(hyperlink));
             annotated
         } else if self.link.is_some() || self.in_code_block {
             HyperlinkLine::new(Line::from(span))

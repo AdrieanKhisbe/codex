@@ -23,6 +23,7 @@ use crate::style::accent_color;
 use crate::style::accent_style;
 use crate::style::status_style;
 use crate::terminal_hyperlinks::LogicalLineSource;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines;
 use crate::terminal_hyperlinks::prefix_hyperlink_lines;
 use crate::terminal_hyperlinks::remap_source_wrapped_line;
@@ -442,7 +443,11 @@ pub(crate) fn empty_mcp_output() -> WebHyperlinkHistoryCell {
     let mut docs_line = HyperlinkLine::new(Line::from("    See the "));
     docs_line.push_span(
         "MCP docs".underlined(),
-        Some("https://developers.openai.com/codex/mcp"),
+        TerminalHyperlink::markdown(
+            "https://developers.openai.com/codex/mcp",
+            &Default::default(),
+        )
+        .as_ref(),
     );
     docs_line.push_span(" to configure them.".into(), /*destination*/ None);
 

@@ -21,18 +21,10 @@ thread_local! {
     static RENDERING: std::cell::RefCell<Preferences> = std::cell::RefCell::new(Preferences::default());
 }
 
-#[cfg(test)]
-pub(crate) fn init(rendering: TuiRendering) {
-    init_with_protocols(rendering, AdditionalHyperlinkProtocols::default());
-}
-
-pub(crate) fn init_with_protocols(
-    rendering: TuiRendering,
-    hyperlink_protocols: AdditionalHyperlinkProtocols,
-) {
+pub(crate) fn init(rendering: TuiRendering, hyperlink_protocols: &AdditionalHyperlinkProtocols) {
     let preferences = Preferences {
         rendering,
-        hyperlink_protocols,
+        hyperlink_protocols: hyperlink_protocols.clone(),
     };
     #[cfg(not(test))]
     {

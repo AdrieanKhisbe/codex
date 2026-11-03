@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::osc8_hyperlink;
 use crate::terminal_palette::indexed_color;
 use pretty_assertions::assert_eq;
@@ -122,9 +123,15 @@ fn links_follow_the_visible_text_through_the_effort_transition() {
     let old_url = "https://example.com/pr/42";
     let new_url = "https://example.com/pr/43";
     let mut previous = HyperlinkLine::from("a ");
-    previous.push_span("PR42界".into(), Some(old_url));
+    previous.push_span(
+        "PR42界".into(),
+        Some(&TerminalHyperlink::web(0..0, old_url.into())),
+    );
     let mut current = HyperlinkLine::from("b ");
-    current.push_span("PR43".into(), Some(new_url));
+    current.push_span(
+        "PR43".into(),
+        Some(&TerminalHyperlink::web(0..0, new_url.into())),
+    );
 
     let area = Rect::new(
         /*x*/ 0, /*y*/ 0, /*width*/ 8, /*height*/ 1,
