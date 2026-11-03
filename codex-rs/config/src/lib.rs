@@ -19,6 +19,7 @@ mod fingerprint;
 mod guardian;
 mod hook_config;
 mod host_name;
+mod hyperlink_protocols;
 mod in_app_browser_requirements;
 mod key_aliases;
 pub mod loader;
@@ -55,6 +56,8 @@ mod tui_rendering;
 pub mod types;
 
 pub const CONFIG_TOML_FILE: &str = "config.toml";
+
+pub use hyperlink_protocols::AdditionalHyperlinkProtocols;
 
 pub use application_requirements::ApplicationNetworkRequirementsToml;
 pub use application_requirements::ApplicationRequirementsToml;

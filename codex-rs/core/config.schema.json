@@ -5095,6 +5095,15 @@
       "additionalProperties": false,
       "description": "Collection of settings that are specific to the TUI.",
       "properties": {
+        "additional_hyperlink_protocols": {
+          "default": [],
+          "description": "Additional clickable Markdown URL schemes (without a colon). User configuration, selected user profiles, and CLI overrides only; project values are ignored.",
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*$",
+            "type": "string"
+          },
+          "type": "array"
+        },
         "agents_overview_grouping": {
           "allOf": [
             {

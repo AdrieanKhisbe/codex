@@ -136,6 +136,11 @@ pub(crate) fn thread_items_to_transcript_cells(
     let inline_visualization_context = config.and_then(|config| {
         thread_id.and_then(|thread_id| InlineVisualizationContext::from_config(config, thread_id))
     });
+    let hyperlink_policy = crate::terminal_hyperlinks::HyperlinkPolicy(
+        config
+            .map(|config| config.tui_additional_hyperlink_protocols.clone())
+            .unwrap_or_default(),
+    );
     let mut cells: TranscriptCells = Vec::new();
     let mut pending = None;
     for item in items {
@@ -147,6 +152,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                 cwd,
                 raw_reasoning_visibility,
                 inline_visualization_context.clone(),
+                &hyperlink_policy,
             ) {
                 match group {
                     PendingActivity::Computer(group) => group.group.push_detail(cell),
@@ -211,6 +217,7 @@ pub(crate) fn thread_items_to_transcript_cells(
                     cwd,
                     raw_reasoning_visibility,
                     inline_visualization_context.clone(),
+                    &hyperlink_policy,
                 );
                 if !projected.is_empty() {
                     PendingActivity::flush(&mut pending, &mut cells);
@@ -229,6 +236,7 @@ fn item_to_cells(
     cwd: &AbsolutePathBuf,
     raw_reasoning_visibility: RawReasoningVisibility,
     inline_visualization_context: Option<InlineVisualizationContext>,
+    hyperlink_policy: &crate::terminal_hyperlinks::HyperlinkPolicy,
 ) -> TranscriptCells {
     let mut cells: TranscriptCells = Vec::new();
     match item {
@@ -285,6 +293,7 @@ fn item_to_cells(
                         cwd.as_path(),
                         inline_visualization_context,
                     )
+                    .with_hyperlink_policy(hyperlink_policy.clone())
                     .with_questions(questions.as_deref().unwrap_or_default()),
                 ));
             }
@@ -311,10 +320,10 @@ fn item_to_cells(
         }
         ThreadItemPayload::Plan { text, .. } => {
             if !text.trim().is_empty() {
-                cells.push(Arc::new(crate::history_cell::new_proposed_plan(
-                    text,
-                    cwd.as_path(),
-                )));
+                cells.push(Arc::new(
+                    crate::history_cell::new_proposed_plan(text, cwd.as_path())
+                        .with_hyperlink_policy(hyperlink_policy.clone()),
+                ));
             }
         }
         ThreadItemPayload::Reasoning {

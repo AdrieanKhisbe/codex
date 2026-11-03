@@ -479,6 +479,27 @@ impl ConfigLayerStack {
         Some(merged)
     }
 
+    /// Resolve hyperlink opt-ins before project provenance is lost in the merged config.
+    /// Selected profile files are user layers; session overrides replace earlier arrays.
+    pub fn additional_hyperlink_protocols(
+        &self,
+    ) -> Result<crate::AdditionalHyperlinkProtocols, toml::de::Error> {
+        let mut protocols = crate::AdditionalHyperlinkProtocols::default();
+        for layer in self.layers_low_to_high() {
+            if matches!(
+                layer.name,
+                ConfigLayerSource::User { .. } | ConfigLayerSource::SessionFlags
+            ) && let Some(value) = layer
+                .config
+                .get("tui")
+                .and_then(|tui| tui.get("additional_hyperlink_protocols"))
+            {
+                protocols = value.clone().try_into()?;
+            }
+        }
+        Ok(protocols)
+    }
+
     pub fn requirements(&self) -> &ConfigRequirements {
         &self.requirements
     }

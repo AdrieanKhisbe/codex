@@ -3,6 +3,16 @@
 use super::*;
 
 impl BottomPane {
+    pub(crate) fn set_hyperlink_policy(
+        &mut self,
+        policy: crate::terminal_hyperlinks::HyperlinkPolicy,
+    ) {
+        if let Some(questions) = &mut self.questions {
+            questions.hyperlink_policy = policy.clone();
+        }
+        self.hyperlink_policy = policy;
+    }
+
     pub(crate) fn push_async_questions(
         &mut self,
         message_id: &str,
@@ -30,6 +40,7 @@ impl BottomPane {
                 self.keymap.clone(),
             );
             questions.set_vim_enabled(self.composer.is_vim_enabled());
+            questions.hyperlink_policy = self.hyperlink_policy.clone();
             Box::new(questions)
         })
     }

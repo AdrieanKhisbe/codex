@@ -16,7 +16,7 @@ use crate::key_hint::KeyBindingListExt;
 use crate::keymap::KeymapContext;
 use crate::keymap::ListAction;
 use crate::keymap::RuntimeKeymap;
-use crate::markdown::render_markdown_for_viewport;
+use crate::markdown::render_markdown_for_viewport_with_policy;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::prefix_hyperlink_lines;
 use codex_protocol::items::AsyncUserInputQuestion;
@@ -63,6 +63,7 @@ pub(crate) enum QuestionSubmission {
 }
 
 pub(crate) struct AsyncQuestions {
+    pub(crate) hyperlink_policy: crate::terminal_hyperlinks::HyperlinkPolicy,
     app_event_tx: AppEventSender,
     state: QuestionState,
     pub(crate) expanded: bool,
@@ -98,6 +99,7 @@ impl AsyncQuestions {
         composer.set_keymap_bindings(&keymap);
         composer.set_footer_hint_override(Some(Vec::new()));
         Self {
+            hyperlink_policy: Default::default(),
             app_event_tx,
             state: QuestionState::default(),
             expanded: false,
@@ -155,7 +157,13 @@ impl AsyncQuestions {
 
     pub(super) fn wrapped_question_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         self.current_question()
-            .map(|question| render_markdown_for_viewport(&question.title, width))
+            .map(|question| {
+                render_markdown_for_viewport_with_policy(
+                    &question.title,
+                    width,
+                    &self.hyperlink_policy,
+                )
+            })
             .unwrap_or_default()
     }
 
@@ -189,7 +197,11 @@ impl AsyncQuestions {
                     ..Default::default()
                 };
                 if is_choice && usize::from(width) > indent {
-                    let lines = render_markdown_for_viewport(label, width - indent as u16);
+                    let lines = render_markdown_for_viewport_with_policy(
+                        label,
+                        width - indent as u16,
+                        &self.hyperlink_policy,
+                    );
                     row.wrapped_name =
                         prefix_hyperlink_lines(lines, prefix.into(), " ".repeat(indent).into());
                 }

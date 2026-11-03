@@ -270,6 +270,7 @@ async fn inactive_thread_user_verification_preserves_foreground_stream() -> Resu
             } => approved.push((thread_id, server_name, request_id)),
             AppEvent::InsertHistoryCell(cell) => app.insert_history_cell(&mut tui, cell),
             AppEvent::ConsolidateAgentMessage {
+                hyperlink_policy,
                 source,
                 copy_source,
                 cwd,
@@ -285,6 +286,7 @@ async fn inactive_thread_user_verification_preserves_foreground_stream() -> Resu
                         &cwd,
                         inline_visualization_context,
                     )
+                    .with_hyperlink_policy(hyperlink_policy)
                     .with_copy_source(copy_source),
                     scrollback_reflow,
                     deferred_history_cell,

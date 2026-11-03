@@ -44,6 +44,10 @@ impl From<&Config> for LocalSettings {
 }
 
 impl LocalSettings {
+    pub(crate) fn hyperlink_policy(&self) -> crate::terminal_hyperlinks::HyperlinkPolicy {
+        crate::terminal_hyperlinks::HyperlinkPolicy(self.tui.additional_hyperlink_protocols.clone())
+    }
+
     fn with_accessibility_preferences(
         config: &Config,
         system_motion: crate::motion::MotionMode,
@@ -56,6 +60,7 @@ impl LocalSettings {
                 config.tui_alternate_screen != codex_config::types::AltScreenMode::Never,
             ),
             tui: Tui {
+                additional_hyperlink_protocols: config.tui_additional_hyperlink_protocols.clone(),
                 notification_settings: config.tui_notifications.clone(),
                 animations: config.animations,
                 screen_reader_detection_done: None,
@@ -126,6 +131,9 @@ impl LocalSettings {
                 .unwrap_or(false),
         );
         tui.session_picker_view = Some(tui.session_picker_view.unwrap_or_default());
+        tui.additional_hyperlink_protocols = bootstrap
+            .config_layer_stack
+            .additional_hyperlink_protocols()?;
         tui.screen_reader_detection_done = None;
         let mut settings = Self {
             audio: Ok(Default::default()),

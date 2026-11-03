@@ -20,6 +20,159 @@ use tempfile::tempdir;
 
 pub(super) struct TestFileSystem;
 
+#[tokio::test]
+async fn hyperlink_protocols_selected_user_profile_and_cli_follow_normal_precedence() {
+    let home = tempdir().unwrap();
+    std::fs::write(
+        home.path().join(CONFIG_TOML_FILE),
+        "[tui]\nadditional_hyperlink_protocols=['vscode']",
+    )
+    .unwrap();
+    std::fs::write(
+        home.path().join("work.config.toml"),
+        "[tui]\nadditional_hyperlink_protocols=['file']",
+    )
+    .unwrap();
+    for (cli, expected) in [
+        (None, "file"),
+        (Some("['custom']"), "custom"),
+        (Some("[]"), ""),
+    ] {
+        let mut overrides = LoaderOverrides::without_managed_config_for_tests();
+        overrides.user_config_profile = Some("work".parse().unwrap());
+        overrides.user_config_path = Some(AbsolutePathBuf::resolve_path_against_base(
+            "work.config.toml",
+            home.path(),
+        ));
+        let cli: Vec<_> = cli
+            .into_iter()
+            .map(|value| {
+                (
+                    "tui.additional_hyperlink_protocols".to_string(),
+                    toml::from_str::<TomlValue>(&format!("value={value}")).unwrap()["value"]
+                        .clone(),
+                )
+            })
+            .collect();
+        let stack = load_config_layers_state(
+            &TestFileSystem,
+            home.path(),
+            None,
+            &cli,
+            ConfigLoadOptions {
+                loader_overrides: overrides,
+                strict_config: true,
+                ..Default::default()
+            },
+            &crate::NoopThreadConfigLoader,
+        )
+        .await
+        .unwrap();
+        let protocols = stack.additional_hyperlink_protocols().unwrap();
+        for scheme in ["vscode", "file", "custom"] {
+            assert_eq!(protocols.contains(scheme), scheme == expected);
+        }
+    }
+}
+
+#[tokio::test]
+async fn hyperlink_protocols_invalid_user_and_cli_values_use_config_errors() {
+    let home = tempdir().unwrap();
+    let user_path = home.path().join(CONFIG_TOML_FILE);
+    std::fs::write(&user_path, "[tui]\nadditional_hyperlink_protocols=['bad:']").unwrap();
+    let error = load_config_layers_state(
+        &TestFileSystem,
+        home.path(),
+        None,
+        &[],
+        ConfigLoadOptions {
+            loader_overrides: LoaderOverrides::without_managed_config_for_tests(),
+            strict_config: true,
+            ..Default::default()
+        },
+        &crate::NoopThreadConfigLoader,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("config.toml"));
+    assert!(error.to_string().contains("invalid hyperlink protocol"));
+    std::fs::write(&user_path, "").unwrap();
+    let cli = [(
+        "tui.additional_hyperlink_protocols".into(),
+        TomlValue::Array(vec![TomlValue::String("bad:".into())]),
+    )];
+    let stack = load_config_layers_state(
+        &TestFileSystem,
+        home.path(),
+        None,
+        &cli,
+        LoaderOverrides::without_managed_config_for_tests(),
+        &crate::NoopThreadConfigLoader,
+    )
+    .await
+    .unwrap();
+    assert!(stack.additional_hyperlink_protocols().is_err());
+}
+
+#[tokio::test]
+async fn hyperlink_protocols_ignore_trusted_project_values_and_warn_before_strict_validation() {
+    let tmp = tempdir().unwrap();
+    let home = tmp.path().join("home");
+    let project = tmp.path().join("project");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(project.join(".codex")).unwrap();
+    std::fs::write(project.join(".project-root"), "").unwrap();
+    let project_key = TomlValue::String(project_trust_key(&project)).to_string();
+    std::fs::write(home.join(CONFIG_TOML_FILE), format!("project_root_markers=['.project-root']\n[projects.{project_key}]\ntrust_level='trusted'\n[tui]\nadditional_hyperlink_protocols=['vscode']")).unwrap();
+    let cwd = AbsolutePathBuf::from_absolute_path(&project).unwrap();
+    for attempted in ["['file']", "[]", "['bad:']", "123"] {
+        std::fs::write(project.join(".codex/config.toml"), format!("[tui]\nadditional_hyperlink_protocols={attempted}\nanimations=false\n[profiles.evil.tui]\nadditional_hyperlink_protocols={attempted}\nsession_picker_view='dense'\n")).unwrap();
+        let mut overrides = LoaderOverrides::without_managed_config_for_tests();
+        overrides.system_config_path = Some(tmp.path().join("system.toml"));
+        let stack = load_config_layers_state(
+            &TestFileSystem,
+            &home,
+            Some(cwd.clone()),
+            &[],
+            ConfigLoadOptions {
+                loader_overrides: overrides,
+                strict_config: true,
+                ..Default::default()
+            },
+            &crate::NoopThreadConfigLoader,
+        )
+        .await
+        .unwrap();
+        assert!(
+            stack
+                .additional_hyperlink_protocols()
+                .unwrap()
+                .contains("vscode")
+        );
+        assert!(
+            !stack
+                .additional_hyperlink_protocols()
+                .unwrap()
+                .contains("file")
+        );
+        assert_eq!(
+            stack.effective_config()["tui"]["animations"].as_bool(),
+            Some(false)
+        );
+        let warnings = stack.startup_warnings().unwrap();
+        assert!(warnings.iter().any(
+            |warning| warning.contains("tui.additional_hyperlink_protocols")
+                && warning.contains("profiles.evil.tui.additional_hyperlink_protocols")
+        ));
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("config.toml"))
+        );
+    }
+}
+
 #[test]
 fn project_config_cannot_override_configured_credential_broker_hosts() {
     let mut config: TomlValue = toml::from_str(

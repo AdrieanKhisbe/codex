@@ -98,6 +98,7 @@ pub(crate) fn new_plan_update(update: UpdatePlanArgs) -> PlanUpdateCell {
 /// cells, then consolidate to this source-backed cell when the plan is complete.
 pub(crate) fn new_proposed_plan(plan_markdown: String, cwd: &Path) -> ProposedPlanCell {
     ProposedPlanCell {
+        hyperlink_policy: Default::default(),
         plan_markdown,
         cwd: cwd.to_path_buf(),
         rendered_lines: MarkdownRenderCache::default(),
@@ -124,6 +125,7 @@ pub(crate) fn new_proposed_plan_stream(
 /// session cwd needed for stable local-link rendering during later transcript reflow.
 #[derive(Debug)]
 pub(crate) struct ProposedPlanCell {
+    hyperlink_policy: crate::terminal_hyperlinks::HyperlinkPolicy,
     plan_markdown: String,
     /// Session cwd used to keep local file-link display aligned with live streamed plan rendering.
     cwd: PathBuf,
@@ -142,6 +144,15 @@ pub(crate) struct ProposedPlanStreamCell {
 }
 
 impl ProposedPlanCell {
+    pub(crate) fn with_hyperlink_policy(
+        mut self,
+        policy: crate::terminal_hyperlinks::HyperlinkPolicy,
+    ) -> Self {
+        self.hyperlink_policy = policy;
+        self.rendered_lines = MarkdownRenderCache::default();
+        self
+    }
+
     fn render_lines(
         &self,
         width: u16,
@@ -156,12 +167,13 @@ impl ProposedPlanCell {
             let mut plan_lines = vec![HyperlinkLine::new(Line::from(" "))];
             let plan_style = proposed_plan_style();
             let wrap_width = width.saturating_sub(4).max(1) as usize;
-            let mut body = crate::markdown::render_markdown_agent_with_list_spacing(
+            let mut body = crate::markdown::render_markdown_agent_with_policy(
                 &self.plan_markdown,
                 Some(wrap_width),
                 Some(self.cwd.as_path()),
                 /*inline_visualization_context*/ None,
                 list_spacing,
+                &self.hyperlink_policy,
             );
             if body.is_empty() {
                 body.push(HyperlinkLine::new(Line::from("(empty)".dim().italic())));

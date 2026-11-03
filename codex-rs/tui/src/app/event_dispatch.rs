@@ -968,6 +968,7 @@ impl App {
                 self.finish_initial_history_replay_buffer(tui);
             }
             AppEvent::ConsolidateAgentMessage {
+                hyperlink_policy,
                 source,
                 copy_source,
                 cwd,
@@ -977,7 +978,7 @@ impl App {
             } => {
                 self.handle_consolidate_agent_message(
                     tui,
-                    history_cell::AgentMarkdownCell::new_with_inline_visualizations(source, &cwd, inline_visualization_context).with_copy_source(copy_source),
+                    history_cell::AgentMarkdownCell::new_with_inline_visualizations(source, &cwd, inline_visualization_context).with_hyperlink_policy(hyperlink_policy).with_copy_source(copy_source),
                     scrollback_reflow,
                     deferred_history_cell,
                 )?;
@@ -990,7 +991,7 @@ impl App {
                     &self.transcript_cells,
                 );
                 let consolidated: Arc<dyn HistoryCell> =
-                    Arc::new(history_cell::new_proposed_plan(source, &self.config.cwd));
+                    Arc::new(history_cell::new_proposed_plan(source, &self.config.cwd).with_hyperlink_policy(self.chat_widget.local_settings.hyperlink_policy()));
 
                 if start < end {
                     self.native_history.consolidate(&self.transcript_cells[start..end], &consolidated);
