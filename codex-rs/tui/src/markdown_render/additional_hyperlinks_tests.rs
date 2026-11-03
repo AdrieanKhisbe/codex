@@ -2,12 +2,30 @@ use super::*;
 use crate::history_cell::HistoryCell;
 use crate::terminal_hyperlinks::decorate_spans;
 
-fn policy() -> HyperlinkPolicy {
-    HyperlinkPolicy(serde_json::from_str(r#"["vscode", "file", "custom"]"#).unwrap())
+fn protocols() -> codex_config::AdditionalHyperlinkProtocols {
+    serde_json::from_str(r#"["vscode", "file", "custom"]"#).unwrap()
+}
+
+struct ResetPreferences;
+impl Drop for ResetPreferences {
+    fn drop(&mut self) {
+        preferences::init(Default::default());
+    }
+}
+
+fn enable_protocols() -> ResetPreferences {
+    preferences::init_with_protocols(Default::default(), protocols());
+    ResetPreferences
 }
 
 fn render(source: &str, width: usize, hide: bool) -> Vec<HyperlinkLine> {
-    render_markdown_lines_with_policy(source, Some(width), None, &|_| hide, &policy())
+    let _reset = enable_protocols();
+    render_markdown_lines_with_width_cwd_and_hidden_link_destinations(
+        source,
+        Some(width),
+        None,
+        &|_| hide,
+    )
 }
 
 fn assert_destination(lines: &[HyperlinkLine], destination: &str) {
@@ -125,7 +143,10 @@ fn additional_hyperlinks_only_mark_the_label_columns_and_reach_the_terminal_buff
         .collect::<Vec<_>>();
     assert_eq!(linked_columns, (4..17).collect::<Vec<_>>());
     let mut line = HyperlinkLine::new(Line::default());
-    line.push_span_with_policy("open".into(), Some(destination), &policy());
+    line.push_span_with_link(
+        "open".into(),
+        TerminalHyperlink::markdown(destination, &protocols()).as_ref(),
+    );
     let mut buffer = ratatui::buffer::Buffer::with_lines(["open"]);
     let area = buffer.area;
     crate::terminal_hyperlinks::mark_buffer_hyperlinks(&mut buffer, area, &[line], 0);
@@ -149,30 +170,28 @@ fn additional_hyperlinks_leave_disabled_protocols_and_plain_paths_unchanged() {
         "file:///tmp/a.rs",
     ] {
         let default = render_markdown_lines_with_width_and_cwd(source, Some(80), None);
-        let opted_in =
-            render_markdown_lines_with_policy(source, Some(80), None, &|_| false, &policy());
+        let opted_in = render(source, 80, false);
         assert_eq!(default, opted_in);
     }
 }
 
 #[test]
 fn additional_hyperlinks_survive_stream_finalization_and_history_reflow() {
+    let _reset = enable_protocols();
     let destination = "vscode://file/tmp/a.rs:12:3?query=one#fragment";
     let source = format!("See [open]({destination}).\n\nDone.\n");
     let mut stream = crate::streaming::controller::StreamController::new(
         Some(30),
         Path::new("/tmp"),
         crate::history_cell::HistoryRenderMode::Rich,
-    )
-    .with_hyperlink_policy(policy());
+    );
     for delta in source.as_bytes().chunks(7) {
         stream.push(std::str::from_utf8(delta).unwrap());
     }
     let (cell, final_source) = stream.finalize();
     assert_eq!(final_source.as_deref(), Some(source.as_str()));
     assert_destination(&cell.unwrap().transcript_hyperlink_lines(30), destination);
-    let cell = crate::history_cell::AgentMarkdownCell::new(source, Path::new("/tmp"))
-        .with_hyperlink_policy(policy());
+    let cell = crate::history_cell::AgentMarkdownCell::new(source, Path::new("/tmp"));
     for width in [12, 80] {
         assert_destination(&cell.transcript_hyperlink_lines(width), destination);
     }
@@ -180,21 +199,82 @@ fn additional_hyperlinks_survive_stream_finalization_and_history_reflow() {
 
 #[test]
 fn additional_hyperlinks_keep_validation_and_existing_trusted_capabilities_separate() {
-    let policy = policy();
-    for destination in ["file:relative", "file:", "https://", "disabled:opaque"] {
-        assert_eq!(policy.destination(destination), None, "{destination}");
+    let destination =
+        |value: &str| TerminalHyperlink::markdown(value, &protocols()).map(|link| link.destination);
+    for value in ["file:relative", "file:", "https://", "disabled:opaque"] {
+        assert_eq!(destination(value), None, "{value}");
     }
     let oversized = format!("custom:{}", "a".repeat(8192));
-    assert_eq!(policy.destination(&oversized), None);
+    assert_eq!(destination(&oversized), None);
     assert_eq!(
-        policy.destination("custom:opaque\u{7}value"),
+        destination("custom:opaque\u{7}value"),
         Some("custom:opaquevalue".into())
     );
     assert_eq!(
-        HyperlinkPolicy::default().destination("file:///tmp/a.rs"),
+        TerminalHyperlink::markdown("file:///tmp/a.rs", &Default::default()),
         None
     );
     let mut line = HyperlinkLine::new(Line::default());
-    line.push_span_with_policy("open".into(), Some("file:///tmp/a.rs"), &policy);
+    line.push_span_with_link(
+        "open".into(),
+        TerminalHyperlink::markdown("file:///tmp/a.rs", &protocols()).as_ref(),
+    );
     assert_destination(&[line], "file:///tmp/a.rs");
+}
+
+#[test]
+fn shared_preferences_apply_to_existing_renderers_without_widget_setup() {
+    let _reset = enable_protocols();
+    let destination = "custom:opaque";
+    let source = format!("[open]({destination})");
+    let reasoning = crate::history_cell::ReasoningSummaryCell::new(
+        String::new(),
+        source.clone(),
+        Path::new("/tmp"),
+        false,
+    );
+    assert_destination(&reasoning.transcript_hyperlink_lines(80), destination);
+    let question = crate::markdown::render_markdown_for_viewport(&source, 80);
+    assert_destination(&question, destination);
+    let message = crate::history_cell::AgentMarkdownCell::new(source, Path::new("/tmp"));
+    assert_destination(&message.transcript_hyperlink_lines(80), destination);
+    preferences::init(Default::default());
+    assert!(
+        reasoning
+            .transcript_hyperlink_lines(80)
+            .iter()
+            .all(|line| line.hyperlinks.is_empty())
+    );
+    assert!(
+        message
+            .transcript_hyperlink_lines(80)
+            .iter()
+            .all(|line| line.hyperlinks.is_empty())
+    );
+}
+
+#[test]
+fn each_render_keeps_one_settings_snapshot() {
+    let _reset = enable_protocols();
+    let source = "[one](custom:one) [two](custom:two)";
+    let lines = render_markdown_lines_with_width_cwd_and_hidden_link_destinations(
+        source,
+        Some(80),
+        None,
+        &|_| {
+            preferences::init(Default::default());
+            true
+        },
+    );
+    let destinations = lines
+        .iter()
+        .flat_map(|line| &line.hyperlinks)
+        .map(|link| link.destination.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(destinations, ["custom:one", "custom:two"]);
+    assert!(
+        render_markdown_lines_with_width_and_cwd(source, Some(80), None)
+            .iter()
+            .all(|line| line.hyperlinks.is_empty())
+    );
 }

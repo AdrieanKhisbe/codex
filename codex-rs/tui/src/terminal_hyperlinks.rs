@@ -40,23 +40,6 @@ use crate::wrapping::RtOptions;
 // Destinations are repeated in every linked buffer cell. Leave oversized URLs as plain text.
 const MAX_HYPERLINK_DESTINATION_BYTES: usize = 8 * 1024;
 
-/// Immutable user opt-in, owned by the stream or history cell that renders Markdown.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct HyperlinkPolicy(pub(crate) codex_config::AdditionalHyperlinkProtocols);
-
-impl HyperlinkPolicy {
-    pub(crate) fn destination(&self, destination: &str) -> Option<String> {
-        if let Some(destination) = web_destination(destination) {
-            return Some(destination);
-        }
-        let destination = explicit_destination(destination)?;
-        let parsed = Url::parse(&destination).ok()?;
-        // Configuring http/https cannot weaken their existing host validation.
-        (!matches!(parsed.scheme(), "http" | "https") && self.0.contains(parsed.scheme()))
-            .then_some(destination)
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TerminalHyperlink {
     pub(crate) columns: Range<usize>,
@@ -67,7 +50,7 @@ pub(crate) struct TerminalHyperlink {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DestinationKind {
     Web,
-    /// An explicit URL validated against its originating session's user opt-in.
+    /// An explicit URL validated against the client's user opt-in.
     Additional,
     /// A generated visualization, validated workspace artifact, or locally viewed image.
     TrustedFile,
@@ -116,6 +99,26 @@ impl TrustedWorkspaceFile {
 }
 
 impl TerminalHyperlink {
+    /// Resolve an explicit Markdown destination once, before styling and layout.
+    pub(crate) fn markdown(
+        destination: &str,
+        protocols: &codex_config::AdditionalHyperlinkProtocols,
+    ) -> Option<Self> {
+        let (destination, parsed) = parsed_destination(destination)?;
+        let destination_kind = if matches!(parsed.scheme(), "http" | "https") {
+            DestinationKind::Web
+        } else if protocols.contains(parsed.scheme()) {
+            DestinationKind::Additional
+        } else {
+            return None;
+        };
+        Some(Self {
+            columns: 0..0,
+            destination,
+            destination_kind,
+        })
+    }
+
     pub(crate) fn web(columns: Range<usize>, destination: String) -> Self {
         Self {
             columns,
@@ -255,47 +258,24 @@ impl HyperlinkLine {
     }
 
     pub(crate) fn push_span(&mut self, span: Span<'static>, destination: Option<&str>) {
-        self.push_span_with_policy(span, destination, &HyperlinkPolicy::default());
+        let link = destination
+            .and_then(web_destination)
+            .map(|destination| TerminalHyperlink::web(0..0, destination));
+        self.push_span_with_link(span, link.as_ref());
     }
 
-    pub(crate) fn push_span_with_policy(
+    /// Preserve an already classified link through styling, tables, and wrapping.
+    pub(crate) fn push_span_with_link(
         &mut self,
         span: Span<'static>,
-        destination: Option<&str>,
-        policy: &HyperlinkPolicy,
+        link: Option<&TerminalHyperlink>,
     ) {
         self.source = None;
         let start = self.source_width();
         let end = start + source_span_width(&span);
         self.line.push_span(span);
         if end > start
-            && let Some(destination) =
-                destination.and_then(|destination| policy.destination(destination))
-        {
-            let destination_kind = if web_destination(&destination).is_some() {
-                DestinationKind::Web
-            } else {
-                DestinationKind::Additional
-            };
-            self.hyperlinks.push(TerminalHyperlink {
-                columns: start..end,
-                destination,
-                destination_kind,
-            });
-        }
-    }
-
-    /// Copy an already validated link while changing its displayed text and column range.
-    pub(crate) fn push_span_with_link(
-        &mut self,
-        span: Span<'static>,
-        link: Option<&TerminalHyperlink>,
-    ) {
-        let start = self.source_width();
-        let end = start + source_span_width(&span);
-        self.push_span(span, None);
-        if end > start
-            && let Some(link) = link.filter(|link| link.terminal_destination().is_some())
+            && let Some(link) = link
         {
             self.hyperlinks.push(link.with_columns(start..end));
         }
@@ -744,7 +724,7 @@ pub(crate) fn web_destination(destination: &str) -> Option<String> {
     Some(safe_destination)
 }
 
-fn explicit_destination(destination: &str) -> Option<String> {
+fn parsed_destination(destination: &str) -> Option<(String, Url)> {
     let safe_destination = sanitized_destination(destination)?;
     let parsed = Url::parse(&safe_destination).ok()?;
     if matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_none() {
@@ -756,7 +736,11 @@ fn explicit_destination(destination: &str) -> Option<String> {
     {
         return None;
     }
-    Some(safe_destination)
+    Some((safe_destination, parsed))
+}
+
+fn explicit_destination(destination: &str) -> Option<String> {
+    parsed_destination(destination).map(|(destination, _)| destination)
 }
 
 fn trusted_file_destination(destination: &str) -> Option<String> {

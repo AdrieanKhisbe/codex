@@ -51,7 +51,7 @@ use crate::render::line_utils::line_to_static;
 use crate::style::accent_color;
 use crate::style::table_separator_style;
 use crate::terminal_hyperlinks::HyperlinkLine;
-use crate::terminal_hyperlinks::HyperlinkPolicy;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::remap_wrapped_line;
 use crate::terminal_hyperlinks::visible_lines;
 use crate::width::char_width;
@@ -83,7 +83,7 @@ mod mermaid;
 pub(crate) mod preferences;
 mod source_tables;
 mod streaming;
-pub(crate) use streaming::render_with_copy_sources_and_policy;
+pub(crate) use streaming::render_with_copy_sources;
 mod table_key_value;
 mod task_lists;
 mod web_links;
@@ -105,8 +105,7 @@ mod list_spacing_tests;
 #[cfg(test)]
 #[path = "markdown_render/task_list_tests.rs"]
 mod task_list_tests;
-pub(crate) use web_links::hide_allowed_link_destination;
-pub(crate) use web_links::hide_web_link_destination;
+pub(crate) use web_links::hide_link_destination;
 use web_links::style_bare_web_urls;
 
 const TABLE_COLUMN_GAP: usize = 2;
@@ -425,22 +424,6 @@ pub(crate) fn render_markdown_lines_with_width_cwd_and_hidden_link_destinations(
     cwd: Option<&Path>,
     is_hidden_link_destination: &dyn Fn(&str) -> bool,
 ) -> Vec<HyperlinkLine> {
-    render_markdown_lines_with_policy(
-        input,
-        width,
-        cwd,
-        is_hidden_link_destination,
-        &HyperlinkPolicy::default(),
-    )
-}
-
-pub(crate) fn render_markdown_lines_with_policy(
-    input: &str,
-    width: Option<usize>,
-    cwd: Option<&Path>,
-    is_hidden_link_destination: &dyn Fn(&str) -> bool,
-    policy: &HyperlinkPolicy,
-) -> Vec<HyperlinkLine> {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
@@ -450,8 +433,7 @@ pub(crate) fn render_markdown_lines_with_policy(
         input,
         math.events(Parser::new_ext(&math.markdown, options).into_offset_iter()),
     ));
-    let mut w =
-        Writer::new(input, width, cwd, is_hidden_link_destination).with_hyperlink_policy(policy);
+    let mut w = Writer::new(input, width, cwd, is_hidden_link_destination);
     // Drop the consumed parser before the rendering state, including on unwind.
     let mut parser = parser;
     w.run(&mut parser);
@@ -460,6 +442,7 @@ pub(crate) fn render_markdown_lines_with_policy(
 
 #[derive(Clone, Debug)]
 struct LinkState {
+    hyperlink: Option<TerminalHyperlink>,
     destination: String,
     show_destination: bool,
     style_label: bool,
@@ -513,7 +496,7 @@ struct Writer<'a, 'policy> {
     wrap_width: Option<usize>,
     cwd: Option<PathBuf>,
     is_hidden_link_destination: &'policy dyn Fn(&str) -> bool,
-    hyperlink_policy: HyperlinkPolicy,
+    hyperlink_protocols: codex_config::AdditionalHyperlinkProtocols,
     line_ends_with_local_link_target: bool,
     pending_local_link_soft_break: bool,
     current_line_content: Option<HyperlinkLine>,
@@ -559,7 +542,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             wrap_width,
             cwd: cwd.map(Path::to_path_buf),
             is_hidden_link_destination,
-            hyperlink_policy: HyperlinkPolicy::default(),
+            hyperlink_protocols: preferences::hyperlink_protocols(),
             line_ends_with_local_link_target: false,
             pending_local_link_soft_break: false,
             current_line_content: None,
@@ -569,11 +552,6 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             current_line_in_code_block: false,
             table_state: None,
         }
-    }
-
-    fn with_hyperlink_policy(mut self, policy: &HyperlinkPolicy) -> Self {
-        self.hyperlink_policy = policy.clone();
-        self
     }
 
     fn run<I>(&mut self, iter: &mut I)
@@ -606,13 +584,8 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         }
         self.prepare_for_event(&event);
         let copy_inline = match &event {
-            Event::Start(Tag::Link { dest_url, .. })
-                if self.hyperlink_policy.destination(dest_url).is_some()
-                    && !dest_url
-                        .starts_with(crate::inline_visualization::LINK_PLACEHOLDER_PREFIX) =>
-            {
-                Some(crate::markdown_copy::Inline::Link(dest_url.as_ref().into()))
-            }
+            // push_link fills this slot after classifying the destination once.
+            Event::Start(Tag::Link { .. }) => Some(crate::markdown_copy::Inline::Ignored),
             _ => crate::markdown_copy::Inline::from_event(&event),
         };
         if let Some(inline) = &copy_inline {
@@ -1382,10 +1355,9 @@ impl<'a, 'policy> Writer<'a, 'policy> {
     fn push_span_to_table_cell(&mut self, span: Span<'static>) {
         let span = self.style_link_label(span);
         let mut annotated = HyperlinkLine::new(Line::default());
-        annotated.push_span_with_policy(
+        annotated.push_span_with_link(
             span,
-            self.link.as_ref().map(|link| link.destination.as_str()),
-            &self.hyperlink_policy,
+            self.link.as_ref().and_then(|link| link.hyperlink.as_ref()),
         );
         if let Some(table_state) = self.table_state.as_mut()
             && let Some(cell) = table_state.current_cell.as_mut()
@@ -1414,13 +1386,10 @@ impl<'a, 'policy> Writer<'a, 'policy> {
 
     fn push_text_spans_to_table_cell(&mut self, text: &str, style: Style) {
         let span = self.style_link_label(Span::styled(text.to_string(), style));
-        let destination = self
-            .link
-            .as_ref()
-            .and_then(|link| self.hyperlink_policy.destination(&link.destination));
-        let mut annotated = if let Some(destination) = destination {
+        let hyperlink = self.link.as_ref().and_then(|link| link.hyperlink.as_ref());
+        let mut annotated = if let Some(hyperlink) = hyperlink {
             let mut annotated = HyperlinkLine::new(Line::default());
-            annotated.push_span_with_policy(span, Some(&destination), &self.hyperlink_policy);
+            annotated.push_span_with_link(span, Some(hyperlink));
             annotated
         } else if self.link.is_some() || self.in_code_block {
             HyperlinkLine::new(Line::from(span))
@@ -1996,9 +1965,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                 let mut current_text = String::new();
                 let flush = |out: &mut HyperlinkLine,
                              current_text: &mut String,
-                             destination: Option<
-                    &crate::terminal_hyperlinks::TerminalHyperlink,
-                >| {
+                             destination: Option<&TerminalHyperlink>| {
                     if !current_text.is_empty() {
                         out.push_span_with_link(
                             Span::raw(std::mem::take(current_text)),
@@ -2217,10 +2184,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
 
     fn style_link_label(&mut self, mut span: Span<'static>) -> Span<'static> {
         if let Some(link) = self.link.as_mut()
-            && self
-                .hyperlink_policy
-                .destination(&link.destination)
-                .is_some()
+            && link.hyperlink.is_some()
         {
             link.has_visible_label |=
                 !span.content.trim().is_empty() && display_width(&span.content) > 0;
@@ -2230,27 +2194,37 @@ impl<'a, 'policy> Writer<'a, 'policy> {
     }
 
     fn push_link(&mut self, dest_url: String) {
-        let style_label = (self.is_hidden_link_destination)(&dest_url);
+        let hyperlink = TerminalHyperlink::markdown(&dest_url, &self.hyperlink_protocols);
+        let style_label = hyperlink.is_some() && (self.is_hidden_link_destination)(&dest_url);
         if style_label {
             self.push_inline_style(self.styles.link);
         }
-        let show_destination = !style_label
-            && (self.hyperlink_policy.destination(&dest_url).is_some()
-                || should_render_link_destination(&dest_url));
+        // The opening parser event already reserved the link's copy wrapper.
+        if let Some(inline) = self.copy_inline.last_mut() {
+            *inline = if hyperlink.is_some()
+                && !dest_url.starts_with(crate::inline_visualization::LINK_PLACEHOLDER_PREFIX)
+            {
+                crate::markdown_copy::Inline::Link(dest_url.as_str().into())
+            } else {
+                crate::markdown_copy::Inline::Ignored
+            };
+        }
+        let show_destination =
+            !style_label && (hyperlink.is_some() || should_render_link_destination(&dest_url));
+        let local_target_display = if hyperlink.is_none() && is_local_path_like_link(&dest_url) {
+            Some(
+                render_local_link_target(&dest_url, self.cwd.as_deref())
+                    .unwrap_or_else(|| dest_url.clone()),
+            )
+        } else {
+            None
+        };
         self.link = Some(LinkState {
+            hyperlink,
             show_destination,
             style_label,
             has_visible_label: false,
-            local_target_display: if self.hyperlink_policy.destination(&dest_url).is_none()
-                && is_local_path_like_link(&dest_url)
-            {
-                Some(
-                    render_local_link_target(&dest_url, self.cwd.as_deref())
-                        .unwrap_or_else(|| dest_url.clone()),
-                )
-            } else {
-                None
-            },
+            local_target_display,
             local_label_spans: Vec::new(),
             local_label_inline: Vec::new(),
             destination: dest_url,
@@ -2262,25 +2236,16 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             if link.style_label {
                 self.pop_inline_style();
             }
-            if link.show_destination
-                || (!link.has_visible_label
-                    && self
-                        .hyperlink_policy
-                        .destination(&link.destination)
-                        .is_some())
-            {
+            if link.show_destination || (!link.has_visible_label && link.hyperlink.is_some()) {
                 // Link destinations are rendered as " (url)" suffixes. When parsing table cells,
                 // append the suffix into the active cell buffer rather than the outer paragraph
                 // line to avoid detached url lines.
                 if self.in_table_cell() {
                     self.push_span_to_table_cell(" (".into());
                     let mut destination = HyperlinkLine::new(Line::default());
-                    destination.push_span_with_policy(
+                    destination.push_span_with_link(
                         Span::styled(link.destination.clone(), self.styles.link),
-                        self.hyperlink_policy
-                            .destination(&link.destination)
-                            .as_deref(),
-                        &self.hyperlink_policy,
+                        link.hyperlink.as_ref(),
                     );
                     if let Some(table_state) = self.table_state.as_mut()
                         && let Some(cell) = table_state.current_cell.as_mut()
@@ -2291,12 +2256,9 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                 } else {
                     self.push_span(" (".into());
                     let mut destination = HyperlinkLine::new(Line::default());
-                    destination.push_span_with_policy(
+                    destination.push_span_with_link(
                         Span::styled(link.destination.clone(), self.styles.link),
-                        self.hyperlink_policy
-                            .destination(&link.destination)
-                            .as_deref(),
-                        &self.hyperlink_policy,
+                        link.hyperlink.as_ref(),
                     );
                     self.push_annotated(destination);
                     self.push_span(")".into());
@@ -2525,10 +2487,9 @@ impl<'a, 'policy> Writer<'a, 'policy> {
         }
         if let Some(line) = self.current_line_content.as_mut() {
             self.copy_line.push(span.content.len(), &self.copy_inline);
-            line.push_span_with_policy(
+            line.push_span_with_link(
                 span,
-                self.link.as_ref().map(|link| link.destination.as_str()),
-                &self.hyperlink_policy,
+                self.link.as_ref().and_then(|link| link.hyperlink.as_ref()),
             );
         }
     }
@@ -2559,13 +2520,10 @@ impl<'a, 'policy> Writer<'a, 'policy> {
 
     fn push_text_spans(&mut self, text: &str, style: Style) {
         let span = self.style_link_label(Span::styled(text.to_string(), style));
-        let destination = self
-            .link
-            .as_ref()
-            .and_then(|link| self.hyperlink_policy.destination(&link.destination));
-        let annotated = if let Some(destination) = destination {
+        let hyperlink = self.link.as_ref().and_then(|link| link.hyperlink.as_ref());
+        let annotated = if let Some(hyperlink) = hyperlink {
             let mut annotated = HyperlinkLine::new(Line::default());
-            annotated.push_span_with_policy(span, Some(&destination), &self.hyperlink_policy);
+            annotated.push_span_with_link(span, Some(hyperlink));
             annotated
         } else if self.link.is_some() || self.in_code_block {
             HyperlinkLine::new(Line::from(span))

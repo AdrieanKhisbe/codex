@@ -304,9 +304,6 @@ impl ChatWidget {
             test_codex_home: None,
         };
 
-        widget
-            .bottom_pane
-            .set_hyperlink_policy(widget.local_settings.hyperlink_policy());
         widget.bottom_pane.set_mention_usage_home(
             widget.local_settings.codex_home.as_path(),
             widget.local_settings.history.persistence,

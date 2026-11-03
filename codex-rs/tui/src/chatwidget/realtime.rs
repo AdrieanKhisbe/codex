@@ -1657,10 +1657,10 @@ impl ChatWidget {
         if role == "user" {
             Box::new(history_cell::new_spoken_user_prompt(text.to_string()))
         } else {
-            Box::new(
-                history_cell::AgentMarkdownCell::new_spoken(text.to_string(), &self.config.cwd)
-                    .with_hyperlink_policy(self.local_settings.hyperlink_policy()),
-            )
+            Box::new(history_cell::AgentMarkdownCell::new_spoken(
+                text.to_string(),
+                &self.config.cwd,
+            ))
         }
     }
 

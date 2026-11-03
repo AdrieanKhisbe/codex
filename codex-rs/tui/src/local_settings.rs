@@ -44,10 +44,6 @@ impl From<&Config> for LocalSettings {
 }
 
 impl LocalSettings {
-    pub(crate) fn hyperlink_policy(&self) -> crate::terminal_hyperlinks::HyperlinkPolicy {
-        crate::terminal_hyperlinks::HyperlinkPolicy(self.tui.additional_hyperlink_protocols.clone())
-    }
-
     fn with_accessibility_preferences(
         config: &Config,
         system_motion: crate::motion::MotionMode,

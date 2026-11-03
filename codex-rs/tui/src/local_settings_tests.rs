@@ -179,12 +179,6 @@ fast_default_opt_out = true
         assert_eq!(config.tui_mouse_scroll_speed, Some(1.5));
         assert!(config.tui_additional_hyperlink_protocols.contains("vscode"));
         assert!(config.tui_additional_hyperlink_protocols.contains("file"));
-        assert_eq!(
-            LocalSettings::from(&config)
-                .hyperlink_policy()
-                .destination("vscode://file/tmp/a.rs:12:3"),
-            Some("vscode://file/tmp/a.rs:12:3".into()),
-        );
         assert!(config.tui_fullscreen_transcript);
         let bootstrap = crate::legacy_core::config::load_config_toml_with_layer_stack(
             home.path(),

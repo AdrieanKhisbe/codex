@@ -296,7 +296,6 @@ struct DelayedApprovalRequest {
 /// (`BottomPaneView`). It performs local input routing and renders time-based hints, while leaving
 /// process-level decisions (quit, interrupt, shutdown) to `ChatWidget`.
 pub(crate) struct BottomPane {
-    hyperlink_policy: crate::terminal_hyperlinks::HyperlinkPolicy,
     /// Composer is retained even when a BottomPaneView is displayed so the
     /// input state is retained when the view is closed.
     composer: ChatComposer,
@@ -404,7 +403,6 @@ impl BottomPane {
         composer.set_skill_mentions(skills);
         Self {
             composer,
-            hyperlink_policy: Default::default(),
             view_stack: Vec::new(),
             key_chord_reset_requested: false,
             warnings_view: None,

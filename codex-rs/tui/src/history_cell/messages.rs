@@ -569,7 +569,6 @@ impl HistoryCell for AgentMessageCell {
 /// because resolving their local file links depends on filesystem state that can change later.
 #[derive(Debug)]
 pub(crate) struct AgentMarkdownCell {
-    hyperlink_policy: crate::terminal_hyperlinks::HyperlinkPolicy,
     markdown_source: String,
     copy_source: Option<String>,
     cwd: PathBuf,
@@ -580,15 +579,6 @@ pub(crate) struct AgentMarkdownCell {
 }
 
 impl AgentMarkdownCell {
-    pub(crate) fn with_hyperlink_policy(
-        mut self,
-        policy: crate::terminal_hyperlinks::HyperlinkPolicy,
-    ) -> Self {
-        self.hyperlink_policy = policy;
-        self.rendered_lines = self.rendered_lines.map(|_| MarkdownRenderCache::default());
-        self
-    }
-
     pub(crate) fn with_copy_source(mut self, source: Option<String>) -> Self {
         self.copy_source = source;
         self
@@ -620,7 +610,6 @@ impl AgentMarkdownCell {
                 .then(MarkdownRenderCache::default);
         Self {
             markdown_source,
-            hyperlink_policy: Default::default(),
             copy_source: None,
             cwd: cwd.to_path_buf(),
             inline_visualization_context,
@@ -689,13 +678,12 @@ impl AgentMarkdownCell {
             // Re-render markdown from source at the current width. Reserve 2 columns for the "• " /
             // " " prefix prepended below.
             let markdown = |source: &str| {
-                crate::markdown::render_markdown_agent_with_policy(
+                crate::markdown::render_markdown_agent_with_list_spacing(
                     source,
                     Some(wrap_width),
                     Some(self.cwd.as_path()),
                     self.inline_visualization_context.as_ref(),
                     list_spacing,
-                    &self.hyperlink_policy,
                 )
             };
             let lines = if self.question_titles.is_empty() {

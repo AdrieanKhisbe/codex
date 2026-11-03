@@ -3,7 +3,7 @@
 //! This module provides the public API surface that the rest of the TUI uses
 //! to turn Markdown source into terminal lines. Common entry points include:
 //!
-//! - [`render_markdown_for_viewport_with_policy`] -- physical rows for widgets that measure their content.
+//! - [`render_markdown_for_viewport`] -- physical rows for widgets that measure their content.
 //! - [`append_markdown`] -- general-purpose, used for plan blocks and history
 //!   cells that already hold pre-processed markdown (no fence unwrapping).
 //! - [`append_markdown_agent`] -- for agent responses.  Runs
@@ -36,23 +36,17 @@ use crate::markdown_render::ListSpacing;
 use crate::table_detect;
 use crate::terminal_hyperlinks::HyperlinkLine;
 
-/// Render Markdown for a widget, retaining full destinations when overwide tokens wrap.
-pub(crate) fn render_markdown_for_viewport_with_policy(
-    input: &str,
-    width: u16,
-    policy: &crate::terminal_hyperlinks::HyperlinkPolicy,
-) -> Vec<HyperlinkLine> {
+/// Render Markdown for a widget that measures its height in terminal rows.
+/// Split overwide tokens (such as URLs) while retaining their full hyperlink destinations.
+pub(crate) fn render_markdown_for_viewport(input: &str, width: u16) -> Vec<HyperlinkLine> {
     let width = usize::from(width.max(1));
-    let lines = crate::markdown_render::render_markdown_lines_with_policy(
-        input,
-        Some(width),
-        /*cwd*/ None,
-        &|destination| {
-            policy.destination(destination).is_some()
-                && crate::markdown_render::hide_allowed_link_destination()
-        },
-        policy,
-    );
+    let lines =
+        crate::markdown_render::render_markdown_lines_with_width_cwd_and_hidden_link_destinations(
+            input,
+            Some(width),
+            /*cwd*/ None,
+            &crate::markdown_render::hide_link_destination,
+        );
     let mut rows = Vec::with_capacity(lines.len());
     for line in lines {
         if line.width() <= width {
@@ -128,24 +122,6 @@ pub(crate) fn render_markdown_agent_with_list_spacing(
     inline_visualization_context: Option<&InlineVisualizationContext>,
     list_spacing: ListSpacing,
 ) -> Vec<HyperlinkLine> {
-    render_markdown_agent_with_policy(
-        markdown_source,
-        width,
-        cwd,
-        inline_visualization_context,
-        list_spacing,
-        &crate::terminal_hyperlinks::HyperlinkPolicy::default(),
-    )
-}
-
-pub(crate) fn render_markdown_agent_with_policy(
-    markdown_source: &str,
-    width: Option<usize>,
-    cwd: Option<&Path>,
-    inline_visualization_context: Option<&InlineVisualizationContext>,
-    list_spacing: ListSpacing,
-    policy: &crate::terminal_hyperlinks::HyperlinkPolicy,
-) -> Vec<HyperlinkLine> {
     let rewritten = rewrite_inline_visualizations(markdown_source, inline_visualization_context);
     let mut code_sources = Vec::new();
     let normalized = if crate::markdown_render::preferences::current().tables {
@@ -155,17 +131,15 @@ pub(crate) fn render_markdown_agent_with_policy(
     };
     let is_hidden_link_destination = |destination: &str| {
         rewritten.trusted_file_links.contains_key(destination)
-            || policy.destination(destination).is_some()
-                && crate::markdown_render::hide_allowed_link_destination()
+            || crate::markdown_render::hide_link_destination(destination)
     };
-    let mut lines = crate::markdown_render::render_with_copy_sources_and_policy(
+    let mut lines = crate::markdown_render::render_with_copy_sources(
         &normalized,
         width,
         cwd,
         &is_hidden_link_destination,
         list_spacing,
         code_sources,
-        policy,
     )
     .lines;
     for hyperlink in lines.iter_mut().flat_map(|line| &mut line.hyperlinks) {
@@ -187,34 +161,13 @@ pub(crate) fn render_streaming_markdown_agent_with_links_and_cwd(
     cwd: Option<&Path>,
     list_spacing: ListSpacing,
 ) -> crate::markdown_render::StreamingMarkdownRender {
-    render_streaming_markdown_agent_with_policy(
-        markdown_source,
-        width,
-        cwd,
-        list_spacing,
-        &crate::terminal_hyperlinks::HyperlinkPolicy::default(),
-    )
-}
-
-pub(crate) fn render_streaming_markdown_agent_with_policy(
-    markdown_source: &str,
-    width: Option<usize>,
-    cwd: Option<&Path>,
-    list_spacing: ListSpacing,
-    policy: &crate::terminal_hyperlinks::HyperlinkPolicy,
-) -> crate::markdown_render::StreamingMarkdownRender {
     let normalized = normalize_markdown_for_rendering(markdown_source);
-    let mut rendered = crate::markdown_render::render_with_copy_sources_and_policy(
+    let mut rendered = crate::markdown_render::render_streaming_markdown_lines_with_width_and_cwd(
         &normalized,
         width,
         cwd,
-        &|destination| {
-            policy.destination(destination).is_some()
-                && crate::markdown_render::hide_allowed_link_destination()
-        },
+        &crate::markdown_render::hide_link_destination,
         list_spacing,
-        Vec::new(),
-        policy,
     );
     if normalized != markdown_source {
         // Fence unwrapping removes opening/closing lines. A normalized tail that is still a raw

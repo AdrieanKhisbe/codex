@@ -144,7 +144,6 @@ impl ChatWidget {
                 });
                 self.note_stream_consolidation_queued();
                 self.app_event_tx.send(AppEvent::ConsolidateAgentMessage {
-                    hyperlink_policy: self.local_settings.hyperlink_policy(),
                     source,
                     copy_source,
                     cwd: self.config.cwd.to_path_buf(),
@@ -253,7 +252,6 @@ impl ChatWidget {
                     &self.config.cwd,
                     self.history_render_mode(),
                 )
-                .with_hyperlink_policy(self.local_settings.hyperlink_policy())
                 .with_list_spacing(
                     if self.local_settings.transcript_mode.is_owned() {
                         ListSpacing::Compact
@@ -319,10 +317,7 @@ impl ChatWidget {
                     .send(AppEvent::ConsolidateProposedPlan(source));
             }
         } else if !plan_text.is_empty() {
-            self.add_to_history(
-                history_cell::new_proposed_plan(plan_text, &self.config.cwd)
-                    .with_hyperlink_policy(self.local_settings.hyperlink_policy()),
-            );
+            self.add_to_history(history_cell::new_proposed_plan(plan_text, &self.config.cwd));
         } else if let Some(source) = consolidated_plan_source {
             self.note_stream_consolidation_queued();
             self.app_event_tx
@@ -481,7 +476,6 @@ impl ChatWidget {
                     self.config.cwd.as_path(),
                     context,
                 )
-                .with_hyperlink_policy(self.local_settings.hyperlink_policy())
                 .with_questions(questions)
                 .with_copy_source(Some(message.clone())),
             );
@@ -633,7 +627,6 @@ impl ChatWidget {
                     self.history_render_mode(),
                     inline_visualization_context,
                 )
-                .with_hyperlink_policy(self.local_settings.hyperlink_policy())
                 .with_list_spacing(
                     if self.local_settings.transcript_mode.is_owned() {
                         ListSpacing::Compact

@@ -529,7 +529,14 @@ impl App {
             );
         }
         chat_widget.restore_kill_buffer_snapshot(self.chat_widget.take_kill_buffer_snapshot());
-        crate::markdown_render::preferences::init(chat_widget.local_settings.tui.rendering);
+        crate::markdown_render::preferences::init_with_protocols(
+            chat_widget.local_settings.tui.rendering,
+            chat_widget
+                .local_settings
+                .tui
+                .additional_hyperlink_protocols
+                .clone(),
+        );
         let mut previous = std::mem::replace(&mut self.chat_widget, chat_widget);
         if previous.realtime_conversation_is_running() {
             previous.park_voice();

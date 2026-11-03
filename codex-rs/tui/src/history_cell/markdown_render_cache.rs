@@ -10,11 +10,13 @@ pub(super) struct MarkdownRenderCache {
     pub(super) cached: Mutex<Option<(MarkdownRenderCacheKey, Vec<HyperlinkLine>)>>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct MarkdownRenderCacheKey {
     pub(super) width: u16,
     pub(super) list_spacing: ListSpacing,
     pub(super) syntax_theme_revision: u64,
+    pub(super) rendering: codex_config::types::TuiRendering,
+    pub(super) hyperlink_protocols: codex_config::AdditionalHyperlinkProtocols,
     pub(super) terminal_fg: Option<(u8, u8, u8)>,
     pub(super) terminal_bg: Option<(u8, u8, u8)>,
     pub(super) color_level: crate::terminal_palette::StdoutColorLevel,
@@ -23,7 +25,7 @@ pub(super) struct MarkdownRenderCacheKey {
 impl MarkdownRenderCache {
     /// Return lines cached for this width and terminal render state, rendering on a cache miss.
     ///
-    /// Only the most recent entry is retained, so changing width, syntax theme, or terminal colors
+    /// Only the most recent entry is retained, so changing width, rendering preferences, theme, or colors
     /// replaces the cached render.
     pub(super) fn render(
         &self,
@@ -35,6 +37,8 @@ impl MarkdownRenderCache {
             width,
             list_spacing,
             syntax_theme_revision: crate::render::highlight::syntax_theme_revision(),
+            rendering: crate::markdown_render::preferences::current(),
+            hyperlink_protocols: crate::markdown_render::preferences::hyperlink_protocols(),
             terminal_fg: crate::terminal_palette::default_fg(),
             terminal_bg: crate::terminal_palette::default_bg(),
             color_level: crate::terminal_palette::stdout_color_level(),

@@ -1218,7 +1218,6 @@ pub(crate) enum AppEvent {
     /// `deferred_history_cell` lets callers add the final stream tail to the
     /// transcript without first writing its provisional render to scrollback.
     ConsolidateAgentMessage {
-        hyperlink_policy: crate::terminal_hyperlinks::HyperlinkPolicy,
         source: String,
         copy_source: Option<String>,
         cwd: PathBuf,

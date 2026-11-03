@@ -61,26 +61,6 @@ pub(crate) fn render_with_copy_sources(
     list_spacing: ListSpacing,
     code_sources: Vec<crate::markdown_copy::SourceBlock>,
 ) -> StreamingMarkdownRender {
-    render_with_copy_sources_and_policy(
-        input,
-        width,
-        cwd,
-        is_hidden_link_destination,
-        list_spacing,
-        code_sources,
-        &crate::terminal_hyperlinks::HyperlinkPolicy::default(),
-    )
-}
-
-pub(crate) fn render_with_copy_sources_and_policy(
-    input: &str,
-    width: Option<usize>,
-    cwd: Option<&Path>,
-    is_hidden_link_destination: &dyn Fn(&str) -> bool,
-    list_spacing: ListSpacing,
-    code_sources: Vec<crate::markdown_copy::SourceBlock>,
-    policy: &crate::terminal_hyperlinks::HyperlinkPolicy,
-) -> StreamingMarkdownRender {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
@@ -103,8 +83,7 @@ pub(crate) fn render_with_copy_sources_and_policy(
         first_is_html: false,
         mutable_fence_start: None,
     };
-    let mut writer =
-        Writer::new(input, width, cwd, is_hidden_link_destination).with_hyperlink_policy(policy);
+    let mut writer = Writer::new(input, width, cwd, is_hidden_link_destination);
     // Drop the consumed parser before the rendering state, including on unwind.
     let mut parser = parser;
     writer.list_spacing = list_spacing;
