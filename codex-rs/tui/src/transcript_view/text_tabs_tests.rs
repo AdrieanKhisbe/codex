@@ -2,6 +2,7 @@
 
 use super::TextLayout;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::prefix_hyperlink_lines;
 use pretty_assertions::assert_eq;
 use ratatui::buffer::Buffer;
@@ -14,9 +15,21 @@ use ratatui::text::Line;
 #[test]
 fn styled_tabs_use_row_stops_including_the_gutter() {
     let mut line = HyperlinkLine::new(Line::from("\ttabs:\t".green()));
-    line.push_span("one".cyan(), Some("https://example.com/one"));
+    line.push_span(
+        "one".cyan(),
+        Some(&TerminalHyperlink::web(
+            0..0,
+            "https://example.com/one".into(),
+        )),
+    );
     line.push_span("\t".magenta().underlined(), /*destination*/ None);
-    line.push_span("two".cyan(), Some("https://example.com/two"));
+    line.push_span(
+        "two".cyan(),
+        Some(&TerminalHyperlink::web(
+            0..0,
+            "https://example.com/two".into(),
+        )),
+    );
     let lines = prefix_hyperlink_lines(vec![line], "› ".bold(), "  ".into());
     let layout = TextLayout::new(lines, /*width*/ 32);
     let area = Rect::new(
@@ -68,7 +81,13 @@ fn styled_tabs_use_row_stops_including_the_gutter() {
 #[test]
 fn tab_stops_restart_after_wrapping_and_resize_preserves_source_and_links() {
     let mut line = HyperlinkLine::new(Line::from("abcdefghi\t".green()));
-    line.push_span("X".cyan(), Some("https://example.com/x"));
+    line.push_span(
+        "X".cyan(),
+        Some(&TerminalHyperlink::web(
+            0..0,
+            "https://example.com/x".into(),
+        )),
+    );
     line.push_span("\tYZ".magenta(), /*destination*/ None);
     let lines = prefix_hyperlink_lines(vec![line], "› ".bold(), "  ".into());
     let layout = TextLayout::new(lines, /*width*/ 10);

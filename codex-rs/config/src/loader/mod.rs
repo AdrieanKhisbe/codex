@@ -1324,6 +1324,28 @@ pub(crate) fn validate_project_mitm_profiles<'a>(
     Ok(())
 }
 
+fn sanitize_project_hyperlink_protocols(config: &mut TomlValue) -> Vec<String> {
+    fn remove(tui: Option<&mut TomlValue>, path: &str, ignored: &mut Vec<String>) {
+        if let Some(tui) = tui.and_then(TomlValue::as_table_mut)
+            && tui.remove("additional_hyperlink_protocols").is_some()
+        {
+            ignored.push(format!("{path}.additional_hyperlink_protocols"));
+        }
+    }
+    let mut ignored = Vec::new();
+    remove(config.get_mut("tui"), "tui", &mut ignored);
+    if let Some(profiles) = config.get_mut("profiles").and_then(TomlValue::as_table_mut) {
+        for (name, profile) in profiles {
+            remove(
+                profile.get_mut("tui"),
+                &format!("profiles.{name}.tui"),
+                &mut ignored,
+            );
+        }
+    }
+    ignored
+}
+
 fn sanitize_project_config(
     config: &mut TomlValue,
     credential_broker: CredentialBrokerProjectState,
@@ -1910,6 +1932,9 @@ async fn discover_project_layers(
                     }
                 };
                 let mut config = config;
+                // Ignore even malformed project opt-ins before strict type validation.
+                let mut ignored_project_config_keys =
+                    sanitize_project_hyperlink_protocols(&mut config);
                 if disabled_reason.is_none() && strict_config {
                     validate_config_toml_strictly(
                         config_file.as_path(),
@@ -1918,11 +1943,11 @@ async fn discover_project_layers(
                         dot_codex_abs.as_path(),
                     )?;
                 }
-                let ignored_project_config_keys = sanitize_project_config(
+                ignored_project_config_keys.extend(sanitize_project_config(
                     &mut config,
                     trust_context.credential_broker,
                     &trust_context.credential_broker_provider_env_keys,
-                );
+                ));
                 if disabled_reason.is_none() && !ignored_project_config_keys.is_empty() {
                     startup_warnings.push(project_ignored_config_keys_warning(
                         &dot_codex_abs,

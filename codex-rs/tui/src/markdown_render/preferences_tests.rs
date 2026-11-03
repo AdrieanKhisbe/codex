@@ -34,7 +34,7 @@ fn disabled_renderers_preserve_source_independently() {
             ..Default::default()
         },
     ] {
-        init(rendering);
+        init(rendering, &Default::default());
         for (index, source) in samples.iter().enumerate() {
             let rendered = render_markdown_text(source);
             if [
@@ -55,13 +55,16 @@ fn disabled_renderers_preserve_source_independently() {
 
 #[test]
 fn disabled_mermaid_keeps_unsupported_source_without_notice() {
-    init(TuiRendering {
-        mermaid: false,
-        ..Default::default()
-    });
+    init(
+        TuiRendering {
+            mermaid: false,
+            ..Default::default()
+        },
+        &Default::default(),
+    );
     let source = "```mermaid\npie\n\"Cats\": 2\n```\n";
     let rendered = render_markdown_text(source);
-    init(TuiRendering::default());
+    init(TuiRendering::default(), &Default::default());
     assert_eq!(
         rendered.to_string(),
         render_markdown_text(&source.replacen("mermaid", "unknown", /*count*/ 1)).to_string(),
@@ -70,10 +73,13 @@ fn disabled_mermaid_keeps_unsupported_source_without_notice() {
 
 #[test]
 fn disabled_tables_keep_markdown_fences_and_cell_markup() {
-    init(TuiRendering {
-        tables: false,
-        ..Default::default()
-    });
+    init(
+        TuiRendering {
+            tables: false,
+            ..Default::default()
+        },
+        &Default::default(),
+    );
     for fence in [
         "```md",
         "```markdown",

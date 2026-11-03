@@ -58,6 +58,7 @@ use crate::onboarding::keys;
 use crate::onboarding::onboarding_screen::KeyboardHandler;
 use crate::onboarding::onboarding_screen::StepStateProvider;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::mark_buffer_hyperlinks;
 use crate::terminal_hyperlinks::visible_lines;
 use crate::tui::FrameRequester;
@@ -720,13 +721,18 @@ impl AuthModeWidget {
             HyperlinkLine::new(Line::from("  Learn about permissions and approvals in the ").dim());
         docs_line.push_span(
             "Codex docs".underlined(),
-            Some("https://developers.openai.com/codex/security"),
+            TerminalHyperlink::markdown(
+                "https://developers.openai.com/codex/security",
+                &Default::default(),
+            )
+            .as_ref(),
         );
         let mut preferences_line =
             HyperlinkLine::new(Line::from("  Your plan's rate limits and ").dim());
         preferences_line.push_span(
             "training data preferences".underlined(),
-            Some("https://chatgpt.com/#settings"),
+            TerminalHyperlink::markdown("https://chatgpt.com/#settings", &Default::default())
+                .as_ref(),
         );
         preferences_line.push_span(" apply".into(), /*destination*/ None);
 

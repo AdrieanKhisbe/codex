@@ -16,6 +16,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::annotate_web_urls_in_line;
+#[cfg(test)]
 use crate::terminal_hyperlinks::web_destination;
 use crate::width::display_width;
 
@@ -88,19 +89,21 @@ impl WebLinkDisplay {
         }
     }
 
+    #[cfg(test)]
     fn hide_destination(self, destination: &str) -> bool {
         self == Self::LabelOnly && web_destination(destination).is_some()
     }
 }
 
-pub(crate) fn hide_web_link_destination(destination: &str) -> bool {
+/// The Markdown writer calls this only for an already approved destination.
+pub(crate) fn hide_web_link_destination(_destination: &str) -> bool {
     static DISPLAY: LazyLock<WebLinkDisplay> = LazyLock::new(|| {
         if !std::io::stdout().is_terminal() || std::env::var_os("STY").is_some() {
             return WebLinkDisplay::WithDestination;
         }
         WebLinkDisplay::for_terminal(&terminal_info(), std::env::var("TERM").ok().as_deref())
     });
-    DISPLAY.hide_destination(destination)
+    *DISPLAY == WebLinkDisplay::LabelOnly
 }
 
 #[cfg(test)]

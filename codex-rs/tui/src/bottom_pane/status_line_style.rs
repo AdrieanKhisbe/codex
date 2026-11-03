@@ -10,6 +10,7 @@ use crate::render::highlight::foreground_style_for_scopes;
 use crate::style::readable_color_on;
 use crate::style::secondary_text_style;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_palette::StdoutColorLevel;
 use crate::terminal_palette::effective_stdout_color_level;
 use crate::thread_color::thread_color;
@@ -160,7 +161,14 @@ where
             style
         };
         if item == StatusLineItem::PullRequestNumber {
-            line.push_span(Span::styled(text, style.underlined()), pull_request_url);
+            line.push_span(
+                Span::styled(text, style.underlined()),
+                pull_request_url
+                    .and_then(|destination| {
+                        TerminalHyperlink::markdown(destination, &Default::default())
+                    })
+                    .as_ref(),
+            );
         } else {
             line.line.push_span(Span::styled(text, style));
         }

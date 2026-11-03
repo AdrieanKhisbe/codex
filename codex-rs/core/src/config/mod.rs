@@ -872,6 +872,9 @@ pub struct Config {
     /// Syntax highlighting theme override (kebab-case name).
     pub tui_theme: Option<String>,
 
+    /// User-controlled additions to HTTP(S) for explicit Markdown hyperlinks.
+    pub tui_additional_hyperlink_protocols: codex_config::AdditionalHyperlinkProtocols,
+
     /// Pet id preselected by the terminal pet picker.
     pub tui_pet: Option<String>,
 
@@ -4527,6 +4530,8 @@ impl Config {
         )
         .map_err(std::io::Error::from)?;
         let otel = otel::resolve_config(cfg.otel.unwrap_or_default(), &mut startup_warnings);
+        let tui_additional_hyperlink_protocols = config_layer_stack.additional_hyperlink_protocols()
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
         let mut config = Self {
             plugins: cfg.plugins,
             prefer_mxc,
@@ -4819,6 +4824,7 @@ impl Config {
                 .unwrap_or(true),
             tui_terminal_title: cfg.tui.as_ref().and_then(|t| t.terminal_title.clone()),
             tui_theme: cfg.tui.as_ref().and_then(|t| t.theme.clone()),
+            tui_additional_hyperlink_protocols,
             tui_pet: cfg.tui.as_ref().and_then(|t| t.pet.clone()),
             tui_pet_anchor: cfg
                 .tui

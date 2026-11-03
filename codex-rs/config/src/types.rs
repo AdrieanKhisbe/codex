@@ -872,6 +872,11 @@ impl QuickDial {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Tui {
+    /// Additional clickable Markdown URL schemes (without a colon).
+    /// User configuration, selected user profiles, and CLI overrides only; project values are ignored.
+    #[serde(default)]
+    pub additional_hyperlink_protocols: crate::AdditionalHyperlinkProtocols,
+
     #[serde(default, flatten)]
     pub notification_settings: TuiNotificationSettings,
 

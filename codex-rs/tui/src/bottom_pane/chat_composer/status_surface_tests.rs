@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::strip_osc8;
 use pretty_assertions::assert_eq;
 use tokio::sync::mpsc::unbounded_channel;
@@ -154,7 +155,13 @@ fn fullscreen_plan_indicator_keeps_the_cycle_hint_when_it_fits() {
     insta::assert_snapshot!("fullscreen_plan_cycle_hint", wide);
 
     let mut status = HyperlinkLine::from("project · ");
-    status.push_span("PR #42".underlined(), Some("https://example.com/pull/42"));
+    status.push_span(
+        "PR #42".underlined(),
+        Some(&TerminalHyperlink::web(
+            0..0,
+            "https://example.com/pull/42".into(),
+        )),
+    );
     composer.set_status_line(Some(status.into()));
     composer.set_active_agent_label(Some("reviewer".to_string()));
     let (narrow, _) = render(&composer, /*width*/ 37, /*footer*/ None);

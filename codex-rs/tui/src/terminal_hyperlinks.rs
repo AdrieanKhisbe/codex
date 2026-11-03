@@ -50,6 +50,8 @@ pub(crate) struct TerminalHyperlink {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DestinationKind {
     Web,
+    /// An explicit URL validated against the client's user opt-in.
+    Additional,
     /// A generated visualization, validated workspace artifact, or locally viewed image.
     TrustedFile,
 }
@@ -97,6 +99,26 @@ impl TrustedWorkspaceFile {
 }
 
 impl TerminalHyperlink {
+    /// Resolve an explicit Markdown destination once, before styling and layout.
+    pub(crate) fn markdown(
+        destination: &str,
+        protocols: &codex_config::AdditionalHyperlinkProtocols,
+    ) -> Option<Self> {
+        let (destination, parsed) = parsed_destination(destination)?;
+        let destination_kind = if matches!(parsed.scheme(), "http" | "https") {
+            DestinationKind::Web
+        } else if protocols.contains(parsed.scheme()) {
+            DestinationKind::Additional
+        } else {
+            return None;
+        };
+        Some(Self {
+            columns: 0..0,
+            destination,
+            destination_kind,
+        })
+    }
+
     pub(crate) fn web(columns: Range<usize>, destination: String) -> Self {
         Self {
             columns,
@@ -106,8 +128,8 @@ impl TerminalHyperlink {
     }
 
     pub(crate) fn retarget_to_trusted_file(&mut self, destination: &Url) {
-        // General Markdown never promotes file URLs. Only generated visualization links use this
-        // path; spoken workspace artifacts require a separately validated capability.
+        // Artifact retargeting is separate from ordinary user-opted-in URLs. Spoken workspace
+        // artifacts require a separately validated capability.
         debug_assert_eq!(destination.scheme(), "file");
         self.destination = destination.to_string();
         self.destination_kind = DestinationKind::TrustedFile;
@@ -168,6 +190,7 @@ impl TerminalHyperlink {
     pub(crate) fn terminal_destination(&self) -> Option<String> {
         match self.destination_kind {
             DestinationKind::Web => web_destination(&self.destination),
+            DestinationKind::Additional => explicit_destination(&self.destination),
             DestinationKind::TrustedFile => trusted_file_destination(&self.destination),
         }
     }
@@ -234,16 +257,16 @@ impl HyperlinkLine {
         self.line.iter().map(source_span_width).sum()
     }
 
-    pub(crate) fn push_span(&mut self, span: Span<'static>, destination: Option<&str>) {
+    /// Preserve a link's destination kind through styling, tables, and wrapping.
+    pub(crate) fn push_span(&mut self, span: Span<'static>, link: Option<&TerminalHyperlink>) {
         self.source = None;
         let start = self.source_width();
         let end = start + source_span_width(&span);
         self.line.push_span(span);
         if end > start
-            && let Some(destination) = destination.and_then(web_destination)
+            && let Some(link) = link
         {
-            self.hyperlinks
-                .push(TerminalHyperlink::web(start..end, destination));
+            self.hyperlinks.push(link.with_columns(start..end));
         }
     }
 
@@ -688,6 +711,25 @@ pub(crate) fn web_destination(destination: &str) -> Option<String> {
         .then(|| parsed.host_str())
         .flatten()?;
     Some(safe_destination)
+}
+
+fn parsed_destination(destination: &str) -> Option<(String, Url)> {
+    let safe_destination = sanitized_destination(destination)?;
+    let parsed = Url::parse(&safe_destination).ok()?;
+    if matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_none() {
+        return None;
+    }
+    if parsed.scheme() == "file"
+        && (!safe_destination.split_once(':')?.1.starts_with('/')
+            || !parsed.path().starts_with('/'))
+    {
+        return None;
+    }
+    Some((safe_destination, parsed))
+}
+
+fn explicit_destination(destination: &str) -> Option<String> {
+    parsed_destination(destination).map(|(destination, _)| destination)
 }
 
 fn trusted_file_destination(destination: &str) -> Option<String> {
@@ -1148,11 +1190,20 @@ mod tests {
         let trailing_destination = "https://example.com/trailing";
 
         let mut hidden = HyperlinkLine::new(Line::default());
-        hidden.push_span("hidden".into(), Some(hidden_destination));
+        hidden.push_span(
+            "hidden".into(),
+            Some(&TerminalHyperlink::web(0..0, hidden_destination.into())),
+        );
         let mut visible = HyperlinkLine::new(Line::from("prefix "));
-        visible.push_span("visible-link".into(), Some(visible_destination));
+        visible.push_span(
+            "visible-link".into(),
+            Some(&TerminalHyperlink::web(0..0, visible_destination.into())),
+        );
         let mut trailing = HyperlinkLine::new(Line::default());
-        trailing.push_span("trailing".into(), Some(trailing_destination));
+        trailing.push_span(
+            "trailing".into(),
+            Some(&TerminalHyperlink::web(0..0, trailing_destination.into())),
+        );
         let lines = vec![hidden, visible, trailing];
 
         let area = Rect::new(
@@ -1192,7 +1243,10 @@ mod tests {
     fn buffer_hyperlinks_follow_wrapped_wide_glyphs() {
         let destination = "https://example.com/wide";
         let mut line = HyperlinkLine::new(Line::from("前文 "));
-        line.push_span("漢字漢字".into(), Some(destination));
+        line.push_span(
+            "漢字漢字".into(),
+            Some(&TerminalHyperlink::web(0..0, destination.into())),
+        );
         line.push_span(" 後文".into(), /*destination*/ None);
         let area = Rect::new(
             /*x*/ 0, /*y*/ 0, /*width*/ 6, /*height*/ 4,
@@ -1220,7 +1274,10 @@ mod tests {
     fn buffer_hyperlinks_follow_wrapped_halfwidth_dakuten() {
         let destination = "https://example.com/dakuten";
         let mut line = HyperlinkLine::new(Line::from("ｶﾞ "));
-        line.push_span("ﾊﾟlink".into(), Some(destination));
+        line.push_span(
+            "ﾊﾟlink".into(),
+            Some(&TerminalHyperlink::web(0..0, destination.into())),
+        );
         line.push_span(" tail".into(), /*destination*/ None);
         let area = Rect::new(
             /*x*/ 0, /*y*/ 0, /*width*/ 5, /*height*/ 4,
@@ -1248,7 +1305,10 @@ mod tests {
     fn forced_width_hyperlinks_render_wide_and_halfwidth_cells_snapshot() {
         let destination = "https://example.com/rendered";
         let mut line = HyperlinkLine::new(Line::from("prefix "));
-        line.push_span("漢字 ｶﾞ".into(), Some(destination));
+        line.push_span(
+            "漢字 ｶﾞ".into(),
+            Some(&TerminalHyperlink::web(0..0, destination.into())),
+        );
         line.push_span(" tail".into(), /*destination*/ None);
 
         let area = Rect::new(

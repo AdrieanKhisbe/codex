@@ -2,6 +2,7 @@
 
 use super::TextLayout;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
 use crate::terminal_hyperlinks::adaptive_wrap_hyperlink_lines;
 use crate::terminal_hyperlinks::prefix_hyperlink_lines;
 use crate::text_selection::SelectionUnit;
@@ -104,7 +105,13 @@ fn hit_testing_uses_graphemes_and_does_not_select_padding() {
 #[test]
 fn visible_rows_preserve_styles_and_wrapped_hyperlinks() {
     let mut line = HyperlinkLine::new(Line::from("read ".green()));
-    line.push_span("documentation".cyan(), Some("https://example.com/docs"));
+    line.push_span(
+        "documentation".cyan(),
+        Some(&TerminalHyperlink::web(
+            0..0,
+            "https://example.com/docs".into(),
+        )),
+    );
     let layout = TextLayout::new(vec![line], /*width*/ 8);
     let area = Rect::new(
         /*x*/ 0, /*y*/ 0, /*width*/ 8, /*height*/ 2,
@@ -189,7 +196,10 @@ fn offsets_can_reach_rows_after_u16_limit() {
 #[test]
 fn aligned_text_excludes_synthetic_leading_columns() {
     let mut line = HyperlinkLine::new(Line::default().right_aligned());
-    line.push_span("wide".into(), Some("https://example.com"));
+    line.push_span(
+        "wide".into(),
+        Some(&TerminalHyperlink::web(0..0, "https://example.com".into())),
+    );
     let layout = TextLayout::new(vec![line], /*width*/ 8);
     assert_eq!(layout.link_at(/*row*/ 0, /*column*/ 3), None);
     assert_eq!(
@@ -233,7 +243,10 @@ fn source_provenance_preserves_spaces_and_excludes_gutters() {
 #[test]
 fn selected_revision_rewraps_both_directions_with_styles_and_indents() {
     let mut source = HyperlinkLine::new(Line::from("alpha ".green()));
-    source.push_span("beta gamma".cyan(), Some("https://example.com"));
+    source.push_span(
+        "beta gamma".cyan(),
+        Some(&TerminalHyperlink::web(0..0, "https://example.com".into())),
+    );
     let lines = adaptive_wrap_hyperlink_lines(
         &[source],
         RtOptions::new(/*width*/ 10)
